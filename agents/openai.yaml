@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Work Log"
+  short_description: "在讨论定稿和工作结束时记录并维护任务日志。"
+  default_prompt: "使用 $agent-work-log 记录本次讨论结论和工作结果，并在后续继续或相近工作时更新同一条工作记录。"
