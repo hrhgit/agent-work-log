@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
+from types import SimpleNamespace
+
+import graph_memory
 
 try:
     import yaml
@@ -622,6 +625,9 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 def cmd_show(args: argparse.Namespace) -> int:
     root = args_root(args)
+    graph_result = graph_memory.show(args, root, graph_helpers())
+    if graph_result is not None:
+        return graph_result
     records, warnings = read_records(root)
     selected = [record for record in records if record.record_id.casefold() == args.record_id.casefold()]
     if len(selected) > 1:
@@ -661,6 +667,16 @@ def add_common(parser: argparse.ArgumentParser, *, include_status: bool = False)
         parser.add_argument("--status", choices=("in_progress", "completed", "blocked", "cancelled"), default="in_progress")
 
 
+def graph_helpers() -> SimpleNamespace:
+    return SimpleNamespace(
+        args_root=args_root, add_location=add_location, read_records=read_records,
+        all_log_paths=all_log_paths, structural_matches=structural_matches,
+        ensure_gitignore=ensure_gitignore, local_now=local_now,
+        iso_timestamp=iso_timestamp, local_date=local_date, next_id=next_id,
+        FRONTMATTER_RE=FRONTMATTER_RE,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create and update date-grouped agent work logs")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -689,10 +705,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.set_defaults(func=cmd_search)
 
     show = subparsers.add_parser("show", help="按编号读取完整原记录和全部后续更新")
-    show.add_argument("record_id", help="W- 或 D- 记录编号")
+    show.add_argument("record_id", help="W-、D-、L- 编号或 .uN 更新点")
+    show.add_argument("--include-archived", action="store_true", help="允许读取归档原文")
     show.add_argument("--json", action="store_true")
     add_location(show)
     show.set_defaults(func=cmd_show)
+    graph_memory.register(subparsers, graph_helpers())
     return parser
 
 

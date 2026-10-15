@@ -1,0 +1,284 @@
+- id: Q01
+  query: profile
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260920-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260922-001
+  note: 原词：函数采样走法。
+- id: Q02
+  query: 多线程并行导入
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260922-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：保留失败经验。
+- id: Q03
+  query: 蓝莓缓存
+  by: situation
+  kind: lexical
+  expect_any_of:
+  - L-20260924-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：只命中 A3，沿取代关系返回 A4。
+- id: Q04
+  query: 文件哈希失效
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260924-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：新缓存失效走法。
+- id: Q05
+  query: 银杏缓冲
+  by: situation
+  kind: lexical
+  expect_any_of:
+  - L-20260927-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：从 A5 沿两级取代返回 A7。
+- id: Q06
+  query: 流式缓冲
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260927-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：最终缓冲方案。
+- id: Q07
+  query: 报表时区错位
+  by: situation
+  kind: lexical
+  expect_any_of:
+  - L-20260928-001
+  - L-20260929-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260930-001
+  note: 原词：同场景不同走法。
+- id: Q08
+  query: 二分排查
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260928-001
+  - L-20260930-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260929-001
+  note: 原词：同走法跨场景。
+- id: Q09
+  query: 直接查文档
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260929-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260930-001
+  note: 原词：文档走法的失败经验。
+- id: Q10
+  query: 网络请求偶发超时
+  by: situation
+  kind: lexical
+  expect_any_of:
+  - L-20260930-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260928-001
+  - L-20260929-001
+  note: 原词：网络场景。
+- id: Q11
+  query: 结论展示规则核验
+  by: situation
+  kind: lexical
+  expect_any_of:
+  - L-20261010-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：开放的摘要核验线。
+- id: Q12
+  query: 分块复用空间
+  by: method
+  kind: lexical
+  expect_any_of:
+  - L-20260927-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: 原词：命中中间旧方案 A6 后返回 A7。
+- id: Q13
+  query: 先测量每个函数耗时再找最慢的一段
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260920-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260922-001
+  note: P2：换种说法描述性能采样；P1 允许未命中。
+- id: Q14
+  query: 让几个执行单元同时搬入表格里的记录
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260922-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: P2：换种说法描述并发导入；P1 允许未命中。
+- id: Q15
+  query: 源文件的指纹变了就丢弃上次保存的解析结果
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260924-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: P2：换种说法描述哈希失效；P1 允许未命中。
+- id: Q16
+  query: 一边接收一边处理避免整批数据常驻内存
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260927-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  note: P2：换种说法描述流式缓冲；P1 允许未命中。
+- id: Q17
+  query: 统计页面里的日期按当地钟表显示后错了一天
+  by: situation
+  kind: paraphrase
+  expect_any_of:
+  - L-20260928-001
+  - L-20260929-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260930-001
+  note: P2：换种说法描述报表日期偏移；P1 允许未命中。
+- id: Q18
+  query: 逐次停用调用链的一部分以缩小故障范围
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260928-001
+  - L-20260930-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260929-001
+  note: P2：换种说法描述分段定位；P1 允许未命中。
+- id: Q19
+  query: 翻阅说明书核对地区时间的含义
+  by: method
+  kind: paraphrase
+  expect_any_of:
+  - L-20260929-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260930-001
+  note: P2：换种说法描述查文档；P1 允许未命中。
+- id: Q20
+  query: 远程访问不时等不到响应便超过等待时间
+  by: situation
+  kind: paraphrase
+  expect_any_of:
+  - L-20260930-001
+  forbid:
+  - L-20260923-001
+  - L-20260925-001
+  - L-20260926-001
+  - L-20261003-001
+  - L-20260928-001
+  - L-20260929-001
+  note: P2：换种说法描述请求超时；P1 允许未命中。
+- id: N01
+  query: 前端按钮在暗色模式下看不清
+  by: content
+  kind: negative
+  expect_any_of: []
+  forbid: []
+  note: 负例：与 fixture 无关，必须返回无相关历史（隔离）。
+- id: N02
+  query: 求职信的语气太生硬需要改写
+  by: content
+  kind: negative
+  expect_any_of: []
+  forbid: []
+  note: 负例：完全无关领域。
+- id: N03
+  query: 数据库主从复制延迟越来越大
+  by: situation
+  kind: negative
+  expect_any_of: []
+  forbid: []
+  note: 负例：同属后端工程但无相关历史。
+- id: N04
+  query: 用强化学习自动调超参数
+  by: method
+  kind: negative
+  expect_any_of: []
+  forbid: []
+  note: 负例：方法维度无相关历史。

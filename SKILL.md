@@ -1,6 +1,6 @@
 ---
 name: agent-work-log
-description: 查阅和维护可供后续工作复用的任务记录。新会话接手、暂停后继续、交接、追问历史、准备沿用旧方案或重复实验时查相关记录；确认关键选择、产生可复用结果与证据、纠正重要事实或旧结论、留下交接状态时写入或更新。用户明确要求记录时也使用。普通问答、临时讨论和没有后续价值的小改动不自动记录。
+description: 查阅和维护可供后续工作复用的任务记录与思路线。新会话接手、暂停后继续、交接、追问历史、准备沿用旧方案或重复实验时，先用 recall 分层查相关思路；确认关键选择、产生可复用结果与证据、纠正重要事实或旧结论、留下交接状态时写入或更新；在分支点开线、阶段结束关线。用户明确要求记录时也使用。普通问答、临时讨论和没有后续价值的小改动不自动记录。
 ---
 
 # Agent Work Log
@@ -21,11 +21,19 @@ description: 查阅和维护可供后续工作复用的任务记录。新会话�
 
 查阅范围由当前问题决定。仅在同一项目中工作不足以触发全项目历史查阅；当前对话已读过相关完整记录且没有新的信息或更正时，直接使用已有内容，无需每个步骤重新读取。
 
-- 编号未知时，用任务名、主要文件、方案或故障关键词执行 `search`。默认要求所有关键词出现在同一条目中，不要求它们在原文中连续；`--match any` 查任一词，`--match phrase` 查完整原文。
-- 搜索返回任务标题、当前明确状态、最近记录时间、来源行号、命中内容，以及从最早命中部分开始的后续更新。已经完成的任务也可能含有重要失败记录；不要只查未完成事项。
-- 编号已知时可直接用 `show`；相关完整记录尚未读过时，读取原记录和全部更新后再决定是否沿用旧方案。按编号读取同时支持 `W-` 工作记录和 `D-` 讨论记录。
-- 把后续明确更正、验证结果和当前结论与早期文字一起阅读，并核对会影响本次行动的适用条件和当前事实。日志保存的是当时的情况；命中关键词不表示旧决定仍然有效，查找脚本也不会自行判断某个方案对错。
-- 查阅命令不修改日志或 `.gitignore`；没有匹配时会显示实际查找目录，格式损坏的日志会明确提示。
+### 分层查阅：只取够用的历史
+
+历史只通过下列命令访问，**不要用 Read、cat、grep 等直接读取 `worklog/` 下的文件**：无关、过时或已归档的历史不应进入上下文。按层逐级展开，够用就停：
+
+1. **L0 `recall`**：先用当前问题查思路线。只返回每条线的情境、走法、状态和结果，不含点的正文。`--by situation` 找“以前遇到过类似问题吗”，`--by method` 找“以前用过这种做法吗”，默认 `content` 综合匹配。返回“无相关历史”就是结论，不要换词反复硬凑。
+2. **L1 `recall --expand L-…`**：只对准备沿用、或需要了解失败原因的那条线展开，得到按顺序经过的点及其一句结论。
+3. **L2 `show <编号>`**：只在需要核对具体证据、命令或原始数值时，按编号读取单个点（`W-`、`D-`、`W-….uN` 更新段）或线（`L-`）的原文。
+
+- recall 已处理有效性：被取代的线自动换成最新的线（`via` 指出最初命中的旧线），归档内容不会出现，放弃的线以一行失败经验保留。仍要核对结果里写明的适用条件是否符合当前情况。
+- **回退到 `search`**：项目还没有线、recall 无命中但确实需要查旧记录，或要按编号以外的关键词定位条目时，用 `search`。它返回条目原文及后续更新，内容较多，关键词要具体；`--unfinished` 只查未完成工作，默认所有关键词出现在同一条目中，`--match any` / `--match phrase` 放宽或收紧。已经完成的任务也可能含有重要失败记录。
+- `show` 默认拒绝已归档的内容（退出码 4）；只有用户要求查看时才加 `--include-archived`。
+- 日志保存的是当时的情况；命中不表示旧决定仍然有效，脚本也不会判断方案对错。把后续更正、验证结果和当前结论放在一起判断。
+- 查阅命令不修改日志或 `.gitignore`（recall 只会刷新 `worklog/.index/` 索引）；没有匹配时会显示实际查找目录，格式损坏的日志会明确提示。
 
 ## 写入触发与时机
 
@@ -42,6 +50,20 @@ description: 查阅和维护可供后续工作复用的任务记录。新会话�
 - 当前上下文中的临时讨论要点不逐轮写入；尚未定稿的讨论仅在用户明确要求保存时记录。一个任务可以在同一条目中写清确认的选择和实际结果，无需固定创建两份记录。
 - 记录失败时写清当时的条件、尝试、证据和结论；记录推翻或更正时再补充旧结论为何失效、当前结论及其适用范围。没有验证的判断注明不确定，不把猜测写成已证实的失败。
 - 持续工作只在上述确认点或阶段节点追加更新，不为单个命令或工具调用写入。例行写入无需打断用户；只有路径不可写、格式无法维护或需要用户决定的冲突才报告问题。
+
+## 思路线：分支点 open，阶段结束 close
+
+工作记录条目（及其更新段）是**点**；**线**是一个思路——“遇到什么问题、沿什么走法、为什么这么走”——按顺序经过若干个点，存为 `worklog/lines/L-YYYYMMDD-NNN.md`。不同线可以经过同一个点。线是以后 recall 的主要入口，所以 situation、method、why、outcome 要写成脱离当前对话也能看懂的句子。
+
+线只依附于已经写入的点：先按上文规则写入或更新工作条目，再对线做操作。
+
+- **open（分支点）**：开始一条可以命名的思路时——在多个方案中选定一个开始做、原方案走不通改换做法、从已有思路分出一个变体去试——用 `line open`。`--from` 是触发这条思路的点（通常是记录问题或决定的条目），`--why` 必填，写清为什么选这个走法；从旧线分出时加 `--branches-from L-…`。
+  - open 若以退出码 3 返回相似候选，先看候选：是同一思路就对它 `extend`，不要新建；确属不同思路才加 `--force-new`。
+- **extend（沿途）**：这条思路产生了新的有记录价值的点（关键尝试、证据、结果）时追加，`--role` 取 attempt / evidence / decision / result。不为每个命令追加。
+- **close（阶段结束）**：思路走通或放弃时 `line close --status worked|abandoned --outcome …`。outcome 是这条线以后被默认看到的全部内容：写清结果、适用条件；放弃时写清失败原因和当时的条件。暂停或交接时线保持 open，下一步写在工作条目里。
+- **取代**：新思路推翻或替代了旧思路的结论时，`line link <新线> --rel supersedes --to <旧线>`，旧线自动变为 superseded，之后 recall 只返回新线。
+- **归档**：用户明确认定某段历史无用时才 `archive <L-…或点编号>`；失败但有教训的线应 close 为 abandoned，不要归档。
+- 普通问答、一步就完成的小改动、没有分支的直线任务不需要开线。阶段结束时可运行 `lint` 检查遗漏的 why、outcome 和长期未关闭的线。
 
 ## 继续工作与合并规则
 
@@ -61,6 +83,8 @@ description: 查阅和维护可供后续工作复用的任务记录。新会话�
 - 可设置 `AGENT_WORK_LOG_TIMEZONE` 写入稳定的 IANA 时区名（例如 `America/Los_Angeles`）；未设置时脚本记录当前 UTC 偏移，避免 Windows 本地化时区名称随语言变化。
 - Skill 本身和日志目录必须分开；不要把日志写进 Skill 安装目录、临时目录或隐藏思维链存储。
 - 文件不存在时创建目录、日期文件和 YAML frontmatter；已有文件必须保留正文，只做必要的增量编辑。
+- 思路线保存为 `worklog/lines/L-YYYYMMDD-NNN.md`，归档点列在 `worklog/lines/.archived_nodes`；线操作不修改日期文件。
+- `worklog/.index/` 是由 Markdown 派生的检索索引（含向量缓存），可删除，下次查阅时自动重建；不要手改。
 
 ## 工作日志目录边界
 
@@ -143,7 +167,19 @@ python scripts/record.py update --work-id W-20260923-001 --status completed --su
 python scripts/record.py search "故障 读数"
 python scripts/record.py search "FileRecall 启动" --unfinished
 python scripts/record.py show W-20260923-001
+
+python scripts/record.py recall "导入很慢"                         # L0：先看有哪些相关思路
+python scripts/record.py recall "逐段缩小范围定位" --by method
+python scripts/record.py recall "导入很慢" --expand L-20261014-001  # L1：展开一条线
+python scripts/record.py show W-20261014-001.u2                     # L2：读单个点原文
+python scripts/record.py line open --title "改用流式解析" --situation "大文件导入内存溢出" --method "边读边解析，不整批载入" --why "整批载入时峰值内存随文件线性增长" --from W-20261014-001
+python scripts/record.py line extend L-20261014-001 --node W-20261014-001.u1 --role result
+python scripts/record.py line close L-20261014-001 --status worked --outcome "峰值内存稳定在 200MB 内；适用于逐行可独立解析的格式"
+python scripts/record.py line link L-20261015-001 --rel supersedes --to L-20261014-001
+python scripts/record.py lint
 ```
+
+recall 默认使用本地 embedding（`BAAI/bge-small-zh-v1.5`，onnx，装在 Skill 目录的 `.venv`，模型缓存在 `~/.cache/agent-work-log/models`），不可用时自动回退到词项检索，结果仍然可用。`embed-status` 查看状态；新机器上首次使用前需运行 `embed-setup`（会下载约 90MB 模型，先征得用户同意）。环境变量 `AGENT_WORK_LOG_EMBED=none` 可强制只用词项检索。
 
 默认从当前项目定位 `worklog/`：Git 项目使用仓库根目录，其他项目查找上级已有的 `worklog/` 或 `AGENTS.md`。设置了 `AGENT_WORK_LOG_DIR` 时使用该日志目录。
 
@@ -161,3 +197,5 @@ python scripts/record.py show W-20260923-001
 4. 日期路径、时区、时间戳和 ID 是否一致，正文是否按时间组织。
 5. Git 项目是否已将日志目录加入 `.gitignore`，且没有覆盖用户已有规则。
 6. YAML frontmatter 是否仍在文件首部，`summary` 是否完整反映当前日期文件，`entry_count` 和 `work_ids` 是否已维护。
+7. 本阶段若开始或换了思路，是否已 open 线（或续接相似的已有线）；思路走通或放弃时，是否已 close 并写清 outcome 与适用条件；新思路取代旧思路时是否已 link supersedes。
+8. 查阅时是否只通过 recall / show / search 访问历史，没有直接读取 `worklog/` 下的文件。
