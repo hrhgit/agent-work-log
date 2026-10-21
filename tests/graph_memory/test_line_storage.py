@@ -145,8 +145,8 @@ class LineStorageTests(GraphCliTestCase):
         self.assert_ok("line", "link", lid, "--rel", "branches_from", "--to", LINES["B1"])
         self.assertIn({"line": LINES["B1"], "rel": "branches_from"}, self.line_meta(lid)["relates"])
 
-    def test_first_open_in_git_ignores_worklog(self):
-        """Git 项目首次新建线后忽略规则覆盖日志及索引目录。"""
+    def test_first_open_in_git_tracks_worklog_and_ignores_only_index(self):
+        """Git 项目首次新建线后只忽略派生索引，线文件本身要纳入版本控制。"""
         subprocess.run(["git", "init", "-q", str(self.project)], check=True, capture_output=True)
         (self.project / ".gitignore").write_text("existing-rule/\n", encoding="utf-8")
         lid = self.open_line()
@@ -156,6 +156,4 @@ class LineStorageTests(GraphCliTestCase):
             cwd=self.project, text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(set(result.stdout.splitlines()), {
-            str(self.line_path(lid)), str(self.log_dir / ".index" / "probe"),
-        })
+        self.assertEqual(set(result.stdout.splitlines()), {str(self.log_dir / ".index" / "probe")})

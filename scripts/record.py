@@ -201,14 +201,18 @@ def write_log(path: Path, meta: dict[str, Any], body: str) -> None:
     path.write_text(dump_frontmatter(meta) + body.lstrip("\n"), encoding="utf-8", newline="\n")
 
 
-def ensure_gitignore(log_root: Path, *, track: bool = False) -> bool:
-    """Add the log directory to the containing work-tree's .gitignore.
+def ensure_gitignore(log_root: Path, *, track: bool = True) -> bool:
+    """Keep the log directory under version control; ignore only its derived index.
 
-    Returns True when an ignore rule was added or already existed. A custom
-    log root outside Git is deliberately left untouched.
+    Default (user preference): worklog/ is committed and uploaded with the
+    project, and only worklog/.index/ (rebuildable cache) is ignored. Set
+    AGENT_WORK_LOG_IGNORE=1 to restore the old behaviour of ignoring the whole
+    directory. Returns True when the needed rule was added or already existed.
+    A custom log root outside Git is deliberately left untouched.
     """
 
-    if track:
+    ignore_all = os.environ.get("AGENT_WORK_LOG_IGNORE") == "1"
+    if not ignore_all and not track:
         return False
     git_root = git_root_for(log_root)
     if git_root is None:
@@ -221,7 +225,7 @@ def ensure_gitignore(log_root: Path, *, track: bool = False) -> bool:
     if not relative.parts:
         return False
 
-    entry = relative.as_posix().rstrip("/") + "/"
+    entry = relative.as_posix().rstrip("/") + "/" + ("" if ignore_all else ".index/")
     gitignore = git_root / ".gitignore"
     try:
         existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
@@ -232,8 +236,10 @@ def ensure_gitignore(log_root: Path, *, track: bool = False) -> bool:
         normalized = line.strip().replace("\\", "/")
         if normalized in {normalized_entry, "/" + normalized_entry, entry, "/" + entry}:
             return True
-        if normalized.startswith(normalized_entry + "/"):
+        if ignore_all and normalized.startswith(normalized_entry + "/"):
             return True
+        if not ignore_all and normalized in {relative.as_posix().rstrip("/"), relative.as_posix().rstrip("/") + "/"}:
+            return True  # an older whole-directory rule already hides the index
 
     prefix = existing
     if prefix and not prefix.endswith(("\n", "\r")):
@@ -662,7 +668,7 @@ def add_common(parser: argparse.ArgumentParser, *, include_status: bool = False)
     parser.add_argument("--summary", required=True, help="写入后整份日期文件的 YAML 摘要")
     parser.add_argument("--body", help="正文；省略时可从 stdin 读取")
     parser.add_argument("--body-file", help="从 UTF-8 文件读取正文")
-    parser.add_argument("--track", action="store_true", help="显式保留日志在 Git 版本控制中，不自动修改 .gitignore")
+    parser.add_argument("--track", action="store_true", default=True, help="默认行为：日志纳入 Git，只忽略 .index/；整目录忽略需设置 AGENT_WORK_LOG_IGNORE=1")
     if include_status:
         parser.add_argument("--status", choices=("in_progress", "completed", "blocked", "cancelled"), default="in_progress")
 

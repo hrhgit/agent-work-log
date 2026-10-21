@@ -92,12 +92,14 @@ description: 查阅和维护可供后续工作复用的任务记录与思路线�
 
 - 需要保留实验或运行证据时，放到项目已有的输出或归档目录，或用户指定的位置；在 Markdown 记录中写清项目相对路径以及必要的哈希、指标或验证结论。不要默认把这些材料写入 `worklog/evidence/`。
 
-## Git 忽略规则
+## Git 与上传规则
 
-- 当记录根目录位于 Git 工作树内时，首次写入或更新前确保该目录的相对路径已经写入工作树根目录的 `.gitignore`；默认就是 `worklog/`。
-- 不要覆盖或重排现有 `.gitignore` 内容；若已有等价规则，不重复添加。没有 `.gitignore` 时创建它并只追加必要的目录规则。
-- 如果用户明确要求把日志纳入版本控制，按用户要求保留日志，不要自动添加或继续维护忽略规则；否则遵循默认忽略，避免日志把本地讨论或工作摘要带入提交。
-- 自定义 `AGENT_WORK_LOG_DIR` 位于 Git 工作树之外时，不要把绝对路径写进 `.gitignore`；只记录该路径无法自动忽略的事实，继续完成日志写入。
+用户的偏好：**工作日志（`worklog/`）纳入版本控制，随项目一起提交并上传到 GitHub**，不再默认忽略。
+
+- 记录根目录位于 Git 工作树内时，只把派生索引 `worklog/.index/`（可重建的向量与图缓存）写入工作树根目录的 `.gitignore`；`worklog/` 其余内容（日期日志、`lines/`）要被提交。
+- 若 `.gitignore` 里有旧的整目录规则（`worklog/`），把它改成 `worklog/.index/`，并告知用户；不要覆盖或重排其他内容。设置环境变量 `AGENT_WORK_LOG_IGNORE=1` 才恢复整目录忽略，仅在用户明确要求不上传日志时使用。
+- 项目被上传、推送或创建仓库时，把 `worklog/` 一并纳入，不要因为它含讨论摘要而擅自排除。上传前仍要确认日志中没有密钥、凭据或隐私数据（本 Skill 本来就不允许写入这些）。自动推送仍须用户明确要求，这里只规定“上传时包含日志”。
+- 自定义 `AGENT_WORK_LOG_DIR` 位于 Git 工作树之外时，不要把绝对路径写进 `.gitignore`；只记录该路径不会随项目上传的事实，继续完成日志写入。
 
 ## YAML frontmatter
 
@@ -185,7 +187,7 @@ recall 默认使用本地 embedding（`BAAI/bge-small-zh-v1.5`，onnx，装在 S
 
 需要指定位置时，使用 `--project-root /path/to/project` 选择项目，或 `--log-dir /path/to/worklog` 指定实际日志目录，二者不能同时传入。旧 `--root` 保留兼容：传入项目目录时自动使用其中的 `worklog/`；目录内同时存在直接日期日志和 `worklog/` 时要求用 `--log-dir` 明确选择。原 `find --query "关键词"` 等价于 `search`；查阅命令可加 `--json` 输出结构化结果。
 
-写入或更新时，脚本会按 Git 忽略规则尝试维护 `.gitignore`。`--body-file` 可替代 `--body` 以避免命令行转义。若运行环境不能使用脚本，按本 Skill 的 frontmatter、ID 标记和正文模板手工编辑，并在编辑后验证 YAML 可解析；如果手工写入且项目有 Git，也要先把 `worklog/` 加入 `.gitignore`。
+写入或更新时，脚本会按“Git 与上传规则”维护 `.gitignore`。`--body-file` 可替代 `--body` 以避免命令行转义。若运行环境不能使用脚本，按本 Skill 的 frontmatter、ID 标记和正文模板手工编辑，并在编辑后验证 YAML 可解析；如果手工写入且项目有 Git，确保 `.gitignore` 只忽略 `worklog/.index/`。
 
 ## 收尾自检
 
@@ -195,7 +197,7 @@ recall 默认使用本地 embedding（`BAAI/bge-small-zh-v1.5`，onnx，装在 S
 2. 是否复用了已知的相关编号，或在编号未知时查找并复用了匹配的 `work_id`。
 3. 是否分清用户确认的选择、实际结果和未验证判断，且没有写入隐藏思维链、密钥或无关原始输出。
 4. 日期路径、时区、时间戳和 ID 是否一致，正文是否按时间组织。
-5. Git 项目是否已将日志目录加入 `.gitignore`，且没有覆盖用户已有规则。
+5. Git 项目的 `.gitignore` 是否只忽略 `worklog/.index/`（日志本体应被提交），且没有覆盖用户已有规则。
 6. YAML frontmatter 是否仍在文件首部，`summary` 是否完整反映当前日期文件，`entry_count` 和 `work_ids` 是否已维护。
 7. 本阶段若开始或换了思路，是否已 open 线（或续接相似的已有线）；思路走通或放弃时，是否已 close 并写清 outcome 与适用条件；新思路取代旧思路时是否已 link supersedes。
 8. 查阅时是否只通过 recall / show / search 访问历史，没有直接读取 `worklog/` 下的文件。
