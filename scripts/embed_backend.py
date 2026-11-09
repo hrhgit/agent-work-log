@@ -55,8 +55,13 @@ def selected_model():
     return json.loads(config.read_text(encoding='utf-8'))['model'] if config.exists() else DEFAULT_MODEL
 
 
+def venv_python():
+    # Windows venvs use Scripts\python.exe; POSIX venvs use bin/python.
+    return SKILL / '.venv' / ('Scripts' if os.name == 'nt' else 'bin') / ('python.exe' if os.name == 'nt' else 'python')
+
+
 def interpreter():
-    return Path(os.environ.get('AGENT_WORK_LOG_EMBED_PYTHON', str(SKILL / '.venv' / 'bin' / 'python')))
+    return Path(os.environ.get('AGENT_WORK_LOG_EMBED_PYTHON', str(venv_python())))
 
 
 def manifest(model):
@@ -129,7 +134,8 @@ class Backend:
         else:
             process = subprocess.run([str(self.python), str(SKILL / 'scripts' / 'embed_worker.py')],
                                      input=json.dumps(dict(model=self.model, role=role, texts=texts)),
-                                     text=True, capture_output=True)
+                                     text=True, encoding='utf-8', errors='replace', capture_output=True,
+                                     env=dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1'))
             if process.returncode:
                 # Keep the contract's one-line warning even for multiline library errors.
                 raise Unavailable(' '.join(process.stderr.splitlines()) or 'worker 运行失败')
@@ -188,20 +194,27 @@ class VectorCache:
 
 def setup(args):
     uv = shutil.which('uv')
-    if not uv:
-        raise ValueError('未找到 uv，请先安装 uv')
-    python = SKILL / '.venv' / 'bin' / 'python'
-    commands = [[uv, 'venv', str(SKILL / '.venv')]] if not python.exists() else []
-    commands += [[uv, 'pip', 'install', '--python', str(python), f'fastembed=={FASTEMBED_VERSION}'],
-                 [str(python), str(SKILL / 'scripts' / 'embed_worker.py'), '--setup', args.model]]
+    python = venv_python()
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
+    pin = f'fastembed=={FASTEMBED_VERSION}'
+    if uv:
+        commands = [[uv, 'venv', str(SKILL / '.venv')]] if not python.exists() else []
+        commands += [[uv, 'pip', 'install', '--python', str(python), pin]]
+    else:
+        # No uv (common on Windows): fall back to the stdlib venv + pip.
+        commands = [[sys.executable, '-m', 'venv', str(SKILL / '.venv')]] if not python.exists() else []
+        commands += [[str(python), '-m', 'pip', 'install', pin]]
+    commands += [[str(python), str(SKILL / 'scripts' / 'embed_worker.py'), '--setup', args.model]]
     for command in commands:
-        result = subprocess.run(command, text=True, capture_output=True)
+        result = subprocess.run(command, text=True, encoding='utf-8', errors='replace',
+                                capture_output=True, env=env)
         if result.returncode:
             raise ValueError('模型安装失败：' + result.stderr)
         if command == commands[-1]:
             info = json.loads(result.stdout)
         elif result.stderr:
             print(result.stderr, end='', file=sys.stderr)
+    CACHE.mkdir(parents=True, exist_ok=True)
     (CACHE / 'selected.json').write_text(json.dumps(dict(model=args.model)), encoding='utf-8')
     value = dict(model_id=info['model_id'], cache=str(CACHE))
     print(json.dumps(value, ensure_ascii=False, indent=2))

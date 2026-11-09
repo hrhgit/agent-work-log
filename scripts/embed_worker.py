@@ -19,6 +19,11 @@ def manifest_path(model):
 
 
 def main():
+    # Windows defaults stdio to the locale codepage; the protocol is UTF-8 JSON.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
+    os.environ.setdefault('HF_HUB_DISABLE_SYMLINKS_WARNING', '1')
     parser = argparse.ArgumentParser()
     parser.add_argument('--setup', metavar='MODEL')
     args = parser.parse_args()
