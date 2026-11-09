@@ -23,7 +23,7 @@ import embed_backend as embedding
 
 RELEVANCE_THRESHOLD = 0.5
 SIMILARITY_THRESHOLD = 0.6
-INDEX_VERSION = "1"
+INDEX_VERSION = "2"
 LINE_FIELDS = ("schema", "id", "title", "status", "situation", "method", "why",
                "path", "outcome", "relates", "created_at", "updated_at")
 LINE_ID = re.compile(r"L-\d{8}-\d{3,}\Z")
@@ -142,7 +142,7 @@ class Graph:
                         archived INTEGER NOT NULL, metadata TEXT, source TEXT, content TEXT);
                     CREATE TABLE line_steps (line TEXT, seq INTEGER, node TEXT, role TEXT,
                         PRIMARY KEY (line, seq));
-                    CREATE TABLE line_links (line TEXT, target TEXT, rel TEXT,
+                    CREATE TABLE line_links (line TEXT, target TEXT, rel TEXT, fork_at TEXT,
                         PRIMARY KEY (line, target, rel));
                     CREATE INDEX steps_node ON line_steps(node);
                     CREATE INDEX links_target ON line_links(target, rel);
@@ -188,7 +188,8 @@ class Graph:
                     for seq, step in enumerate(meta.get("path") or [], 1):
                         db.execute("INSERT INTO line_steps VALUES (?,?,?,?)", (lid, seq, step["node"], step.get("role", "")))
                     for link in meta.get("relates") or []:
-                        db.execute("INSERT OR IGNORE INTO line_links VALUES (?,?,?)", (lid, link["line"], link["rel"]))
+                        db.execute("INSERT OR IGNORE INTO line_links VALUES (?,?,?,?)", (
+                            lid, link["line"], link["rel"], link.get("fork_at")))
                 db.executemany("INSERT INTO meta VALUES (?,?)", [("fingerprint", fingerprint), ("version", INDEX_VERSION)])
                 db.commit()
             os.replace(name, self.index)
@@ -239,12 +240,128 @@ class Graph:
             raise ValueError(f"未找到{'线' if kind == 'lines' else '点'}：{identifier}")
         return row
 
-    def l0(self, db, row, via=None):
+    def l0(self, db, row, via=None, *, include_archived=False):
         meta = json.loads(row["metadata"])
+        links_table = "line_links" if include_archived else "visible_links"
         return {**{key: meta.get(key, "") for key in ("id", "title", "status", "situation", "method", "outcome")},
                 "branched_from": [link[0] for link in db.execute(
-                    "SELECT target FROM visible_links WHERE line=? AND rel='branches_from' ORDER BY target", (row["id"],))],
+                    f"SELECT target FROM {links_table} WHERE line=? AND rel='branches_from' ORDER BY target", (row["id"],))],
                 "via": via}
+
+    @staticmethod
+    def line_nodes(db, line_id):
+        """Return one line's ordered point IDs without exposing point bodies."""
+        return [row[0] for row in db.execute(
+            "SELECT node FROM line_steps WHERE line=? ORDER BY seq", (line_id,))]
+
+    def resolved_fork(self, db, child, parent, stored=None):
+        """Return (fork point, inferred) for a branch relation.
+
+        Older line files predate ``fork_at``.  If they share points, the last
+        shared point in the child path is the least surprising compatibility
+        value; new writes always store the value explicitly.
+        """
+        parent_nodes = set(self.line_nodes(db, parent))
+        if stored and stored in parent_nodes:
+            return stored, False
+        child_nodes = self.line_nodes(db, child)
+        shared = [node for node in child_nodes if node in parent_nodes]
+        if shared:
+            return shared[-1], True
+        return stored, False
+
+    @staticmethod
+    def tree_line(row, base, *, relation=None, fork_at=None, inferred=False):
+        value = dict(base)
+        if relation is not None:
+            value["relation"] = relation
+            value["fork_at"] = fork_at
+            value["fork_at_inferred"] = bool(inferred)
+        value["children"] = []
+        return value
+
+    def tree(self, db, line_id, *, include_archived=False):
+        """Return the branch forest containing one line, with concise L0 nodes.
+
+        ``branches_from`` and ``supersedes`` are both shown as directed
+        parent/child edges.  The latter is labeled as a replacement history,
+        while ordinary recall keeps its existing latest-line redirection.
+        """
+        root_row = self.row(db, "lines", line_id, include_archived)
+        if root_row is None:
+            return None
+        table = "lines" if include_archived else "visible_lines"
+        rows = {row["id"]: row for row in db.execute(f"SELECT * FROM {table}")}
+        if root_row["id"] not in rows:
+            rows[root_row["id"]] = root_row
+        parents = {}
+        children = {}
+        for link in db.execute(
+                "SELECT line, target, rel, fork_at FROM line_links "
+                "WHERE rel IN ('branches_from', 'supersedes')"):
+            child, parent = link["line"], link["target"]
+            if child not in rows or parent not in rows:
+                continue
+            if link["rel"] == "branches_from":
+                fork_at, inferred = self.resolved_fork(db, child, parent, link["fork_at"])
+            else:
+                fork_at, inferred = None, False
+            edge = dict(child=child, parent=parent, relation=link["rel"],
+                        fork_at=fork_at, inferred=inferred)
+            parents.setdefault(child, []).append(edge)
+            children.setdefault(parent, []).append(edge)
+
+        # Include all branch ancestors and descendants of the requested line.
+        component = {root_row["id"]}
+        pending = [root_row["id"]]
+        while pending:
+            current = pending.pop()
+            neighbours = [edge["parent"] for edge in parents.get(current, ())]
+            neighbours += [edge["child"] for edge in children.get(current, ())]
+            for neighbour in neighbours:
+                if neighbour not in component:
+                    component.add(neighbour)
+                    pending.append(neighbour)
+
+        def line_order(line):
+            row = rows[line]
+            meta = json.loads(row["metadata"])
+            created = meta.get("created_at") or row["updated_at"]
+            return timestamp(created), line
+
+        roots = sorted(
+            (line_id for line_id in component
+             if not any(edge["parent"] in component for edge in parents.get(line_id, ()))),
+            key=line_order,
+        )
+        if not roots:
+            # A malformed cycle should still be inspectable rather than making
+            # the read command recurse forever.
+            roots = [root_row["id"]]
+
+        def ordered_edges(line):
+            return sorted(
+                (edge for edge in children.get(line, ()) if edge["child"] in component),
+                key=lambda edge: line_order(edge["child"]),
+            )
+
+        def build(line, *, relation=None, fork_at=None, inferred=False, trail=()):
+            row = rows[line]
+            node = self.tree_line(row, self.l0(db, row, include_archived=include_archived), relation=relation,
+                                  fork_at=fork_at, inferred=inferred)
+            if line in trail:
+                node["cycle"] = True
+                return node
+            next_trail = (*trail, line)
+            for edge in ordered_edges(line):
+                child = edge["child"]
+                child_node = build(child, relation=edge["relation"],
+                                   fork_at=edge["fork_at"], inferred=edge["inferred"],
+                                   trail=next_trail)
+                node["children"].append(child_node)
+            return node
+
+        return dict(selected=root_row["id"], roots=[build(line) for line in roots], message=None)
 
     def latest(self, db, row):
         seen = set()
@@ -391,6 +508,35 @@ def expand_text(value):
     return out
 
 
+def tree_text(value):
+    """Render the branch forest without including point bodies."""
+    out = [f"树状视图（选中：{value['selected']}）"]
+
+    def render(node, prefix, last, is_root=False):
+        marker = "" if is_root else ("└─ " if last else "├─ ")
+        relation = ""
+        if node.get("relation"):
+            relation = f"[{node['relation']}"
+            if node.get("fork_at"):
+                relation += f"；分支点 {node['fork_at']}"
+                if node.get("fork_at_inferred"):
+                    relation += "；推断"
+            relation += "] "
+        out.append(f"{prefix}{marker}{relation}{node['id']} | {node['title']} | {node['status']}")
+        detail_prefix = prefix + ("   " if last else "│  ") if not is_root else "  "
+        for key, label in (("situation", "问题"), ("method", "走法"), ("outcome", "结果")):
+            if node.get(key):
+                out.append(f"{detail_prefix}{label}：{node[key]}")
+        children = node.get("children", ())
+        for index, child in enumerate(children):
+            render(child, detail_prefix, index == len(children) - 1)
+
+    roots = value.get("roots", ())
+    for index, root in enumerate(roots):
+        render(root, "", index == len(roots) - 1, is_root=True)
+    return out
+
+
 def emit(value, as_json, text):
     """Print JSON with --json, otherwise the given text lines (or a callable producing them)."""
     if as_json:
@@ -450,6 +596,15 @@ def run(args, helpers):
                 view = graph.recall(db, args)
             emit(view, args.json, expand_text if args.expand else recall_text)
             return 0
+        if args.command == "tree":
+            view = graph.tree(db, args.identifier, include_archived=args.include_archived)
+            if view is None:
+                row = graph.row(db, "lines", args.identifier, True)
+                if row is not None and row["archived"] and not args.include_archived:
+                    return archived_error()
+                raise ValueError(f"未找到线：{args.identifier}")
+            emit(view, args.json, tree_text)
+            return 0
         if args.command == "lint":
             cutoff = (now(args, helpers) - timedelta(days=args.stale_days)).timestamp()
             issues = []
@@ -487,6 +642,17 @@ def run(args, helpers):
             graph.require(db, "nodes", args.node)
             if args.branches_from:
                 graph.require(db, "lines", args.branches_from)
+            if args.fork_at and not args.branches_from:
+                raise ValueError("--fork-at 只能与 --branches-from 一起使用")
+            fork_at = None
+            if args.branches_from:
+                fork_at = args.fork_at or args.node
+                parent_nodes = graph.line_nodes(db, args.branches_from)
+                if fork_at not in parent_nodes:
+                    raise ValueError(
+                        f"分叉点不在父线 {args.branches_from} 的路径中：{fork_at}；"
+                        "请用 --fork-at 指定父线中的点"
+                    )
             candidates = []
             new_text = args.situation + " " + args.method
             query = tokens(new_text)
@@ -513,10 +679,13 @@ def run(args, helpers):
                 print("已有相似思路，请复用或使用 --force-new", file=sys.stderr)
                 return 3
             lid = helpers.next_id([path.stem for path in (graph.root / "lines").glob("L-*.md")], "L", helpers.local_date(stamp_dt))
+            relates = []
+            if args.branches_from:
+                relates.append(dict(line=args.branches_from, rel="branches_from", fork_at=fork_at))
             meta = dict(schema="agent-work-log/line-v1", id=lid, title=args.title, status="open",
                         situation=args.situation, method=args.method, why=args.why,
                         path=[dict(node=args.node, role=args.role)], outcome="",
-                        relates=[dict(line=args.branches_from, rel="branches_from")] if args.branches_from else [],
+                        relates=relates,
                         created_at=stamp, updated_at=stamp)
             body = "\n\n"
         else:
@@ -543,6 +712,25 @@ def run(args, helpers):
                 graph.require(db, "lines", args.to)
                 if lid == args.to:
                     raise ValueError("线关系不能引用自己")
+                if args.fork_at and args.rel != "branches_from":
+                    raise ValueError("--fork-at 只能用于 branches_from 关系")
+                fork_at = None
+                if args.rel == "branches_from":
+                    parent_nodes = graph.line_nodes(db, args.to)
+                    fork_at = args.fork_at
+                    if fork_at:
+                        if fork_at not in parent_nodes:
+                            raise ValueError(
+                                f"分叉点不在父线 {args.to} 的路径中：{fork_at}"
+                            )
+                    else:
+                        child_nodes = graph.line_nodes(db, lid)
+                        shared = [node for node in child_nodes if node in set(parent_nodes)]
+                        if not shared:
+                            raise ValueError(
+                                "无法从两条线推断分叉点，请使用 --fork-at 指定父线中的点"
+                            )
+                        fork_at = shared[-1]
                 if args.rel == "supersedes":
                     pending, seen = [args.to], set()
                     while pending:
@@ -555,8 +743,12 @@ def run(args, helpers):
                         pending.extend(row[0] for row in db.execute(
                             "SELECT target FROM line_links WHERE line=? AND rel='supersedes'", (current,)))
                 relation = dict(line=args.to, rel=args.rel)
-                if relation not in meta.setdefault("relates", []):
-                    meta["relates"].append(relation)
+                if args.rel == "branches_from":
+                    relation["fork_at"] = fork_at
+                relates = meta.setdefault("relates", [])
+                relates[:] = [item for item in relates
+                               if not (item.get("line") == args.to and item.get("rel") == args.rel)]
+                relates.append(relation)
                 if args.rel == "supersedes":
                     path = graph.root / "lines" / f"{args.to}.md"
                     target, target_body, _ = read_line(path, helpers)
@@ -598,6 +790,7 @@ def register(subparsers, helpers):
     opened.add_argument("--from", dest="node", required=True)
     opened.add_argument("--role", choices=ROLES, default="problem")
     opened.add_argument("--branches-from")
+    opened.add_argument("--fork-at", help="父线中的明确分叉点；省略时尝试使用 --from 点")
     opened.add_argument("--force-new", action="store_true")
     common(opened)
     for action in ("extend", "close", "link"):
@@ -612,6 +805,7 @@ def register(subparsers, helpers):
         else:
             parser.add_argument("--rel", choices=("supersedes", "branches_from"), required=True)
             parser.add_argument("--to", required=True)
+            parser.add_argument("--fork-at", help="branches_from 关系的父线分叉点")
         common(parser)
     archive = subparsers.add_parser("archive", help="归档线或点")
     archive.add_argument("identifier")
@@ -624,6 +818,10 @@ def register(subparsers, helpers):
     recall.add_argument("--limit", type=int, default=5, help="最多返回条数（默认 5）")
     recall.add_argument("--expand", metavar="L-ID", help="展开一条线的理由和点摘要")
     common(recall)
+    tree = subparsers.add_parser("tree", help="展开一条线所在的树状分支")
+    tree.add_argument("identifier", metavar="L-ID", help="要展开的线编号")
+    tree.add_argument("--include-archived", action="store_true", help="包含已归档的线")
+    common(tree)
     lint = subparsers.add_parser("lint", help="检查线记录缺漏及长期未更新的开放思路")
     lint.add_argument("--stale-days", type=int, default=14)
     common(lint)

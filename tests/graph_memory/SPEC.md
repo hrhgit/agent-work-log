@@ -1,6 +1,6 @@
 # Graph memory 接口契约（测试用）
 
-本文件是 worklog 图记忆（点 / 线 / 视图层 / 上下文隔离）的**行为契约**，测试按它编写；实现尚未开始。实现时若需改契约，先改本文件再改测试。
+本文件是 worklog 图记忆（点 / 线 / 分叉点 / 视图层 / 上下文隔离）的**行为契约**，测试按它编写；实现若需改契约，先改本文件再改测试。
 
 ## 概念
 
@@ -27,7 +27,7 @@ path:                   # 有序；同一线内相邻两步不能是同一点
   - {node: W-20261010-002, role: problem}   # role: problem|attempt|decision|evidence|result
 outcome: ""             # worked/abandoned 时必填
 relates:                # 线与线的关系
-  - {line: L-20261009-003, rel: branches_from}   # rel: branches_from | supersedes
+  - {line: L-20261009-003, rel: branches_from, fork_at: W-20261010-002}   # rel: branches_from | supersedes
 created_at: "2026-10-14T10:00:00-07:00"
 updated_at: "2026-10-14T10:00:00-07:00"
 ```
@@ -40,13 +40,14 @@ updated_at: "2026-10-14T10:00:00-07:00"
 
 | 命令 | 行为 |
 |---|---|
-| `line open --title T --situation S --method M --why W --from NODE [--role problem] [--branches-from L] [--force-new]` | 新建线，首个点为 NODE；打印新编号。NODE 不存在 → 退出码 2。`why` 为空白 → 退出码 2。若存在相似的未归档线（见“相似检查”）且未给 `--force-new` → **不创建**，退出码 3，stdout（`--json` 时为 `{"candidates":[{"id","title","score"}]}`）列出候选。 |
+| `line open --title T --situation S --method M --why W --from NODE [--role problem] [--branches-from L] [--fork-at NODE] [--force-new]` | 新建线，首个点为 NODE；打印新编号。NODE 不存在 → 退出码 2。`why` 为空白 → 退出码 2。指定 `--branches-from` 时，`--fork-at` 必须属于父线；省略时只有在 `--from` 也属于父线时才自动记录该点，否则退出码 2。若存在相似的未归档线（见“相似检查”）且未给 `--force-new` → **不创建**，退出码 3，stdout（`--json` 时为 `{"candidates":[{"id","title","score"}]}`）列出候选。 |
 | `line extend L --node NODE --role R` | 在 path 末尾追加；NODE 不存在 → 2；与末尾点相同 → 2；L 已关闭（非 open）→ 2。 |
 | `line close L --status worked\|abandoned --outcome O` | 关闭；outcome 为空白 → 2；L 非 open → 2。 |
-| `line link A --rel supersedes\|branches_from --to B` | 在 A 的 `relates` 写入；`supersedes` 同时把 B 状态设为 `superseded`。自引用或形成 supersedes 环 → 2。 |
+| `line link A --rel supersedes\|branches_from --to B [--fork-at NODE]` | 在 A 的 `relates` 写入；`branches_from` 关系保存父线上的分叉点，省略时从两条线共同经过的最后一个点推断；没有共同点时退出码 2。`supersedes` 同时把 B 状态设为 `superseded`。自引用或形成 supersedes 环 → 2。 |
 | `archive ID` | ID 为线或点。线：状态设为 `archived`。点：写入 `<log_dir>/lines/.archived_nodes`（每行一个编号），不改每日文件。 |
 | `reindex` | 从 Markdown 全量重建 `.index/`。 |
 | `recall QUERY [--by content\|situation\|method] [--limit 5] [--expand L]` | 见“视图层”。若索引不存在或任一源文件比索引新，先自动重建。 |
+| `tree L-ID [--include-archived]` | 展开指定线所在的 `branches_from` 分支和 `supersedes` 历史父子树；返回父线、子线、关系和分支关系的 `fork_at`，不包含点正文。旧关系没有 `fork_at` 时按共同路径推断并标记。普通 `recall` 不受影响。 |
 | `show ID` | 现有行为扩展到 `L-` 编号与 `.uN` 点；ID 已归档 → 退出码 4 并提示，加 `--include-archived` 才显示。 |
 | `lint [--stale-days 14]` | 报告问题，有问题退出码 1：`missing_why`、`missing_node`、`stale_open`（`updated_at` 早于 now−stale-days）、`empty_path`、`missing_outcome`（已关闭但 outcome 空）。`--json` 输出 `{"issues":[{"line","code"}]}`。 |
 
@@ -83,6 +84,20 @@ updated_at: "2026-10-14T10:00:00-07:00"
 - `also_in` 列出同样经过该点的其他非归档线。
 - 已归档的点在 steps 中以 `{"node": ..., "archived": true}` 占位，不给标题和结论。
 - L 为 archived → 退出码 4。
+
+`tree L` 返回树状 **L1** 视图：
+
+```json
+{"selected":"L-…","roots":[
+  {"id":"L-…","title":"…","status":"worked","situation":"…","method":"…","outcome":"…",
+   "children":[{"id":"L-…","relation":"branches_from","fork_at":"W-…","fork_at_inferred":false,"children":[]}]}
+],"message":null}
+```
+
+- 以 `branches_from` 和 `supersedes` 作为有方向的父子关系；后者标为取代历史，普通 recall 仍按原规则跳到最新线。
+- 选择一条子线时，结果包含它的可见父线和后代；多个父线时返回多个根。
+- 归档线默认隐藏；`--include-archived` 才展开它们。
+- `fork_at_inferred: true` 表示旧线文件没有保存分叉点，视图按两条线共同经过的最后一个点推断。
 
 `show W-…` 才给出 **L2**（原文）。
 

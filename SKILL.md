@@ -57,11 +57,13 @@ description: 查阅和维护可供后续工作复用的任务记录与思路线�
 
 线只依附于已经写入的点：先按上文规则写入或更新工作条目，再对线做操作。
 
-- **open（分支点）**：开始一条可以命名的思路时——在多个方案中选定一个开始做、原方案走不通改换做法、从已有思路分出一个变体去试——用 `line open`。`--from` 是触发这条思路的点（通常是记录问题或决定的条目），`--why` 必填，写清为什么选这个走法；从旧线分出时加 `--branches-from L-…`。
+- **open（分支点）**：开始一条可以命名的思路时——在多个方案中选定一个开始做、原方案走不通改换做法、从已有思路分出一个变体去试——用 `line open`。`--from` 是这条新线的第一个点，`--why` 必填，写清为什么选这个走法；从旧线分出时加 `--branches-from L-…`，并用 `--fork-at NODE` 明确父线上的分叉点。省略 `--fork-at` 时，程序只在 `--from` 点属于父线时自动记录它；新线从另一个点开始时必须显式指定。
   - open 若以退出码 3 返回相似候选，先看候选：是同一思路就对它 `extend`，不要新建；确属不同思路才加 `--force-new`。
 - **extend（沿途）**：这条思路产生了新的有记录价值的点（关键尝试、证据、结果）时追加，`--role` 取 attempt / evidence / decision / result。不为每个命令追加。
 - **close（阶段结束）**：思路走通或放弃时 `line close --status worked|abandoned --outcome …`。outcome 是这条线以后被默认看到的全部内容：写清结果、适用条件；放弃时写清失败原因和当时的条件。暂停或交接时线保持 open，下一步写在工作条目里。
+- **关联**：补充已有分支时用 `line link A --rel branches_from --to B --fork-at NODE`；`NODE` 必须属于父线 B。两条线有共同点时可以省略，程序会保存共同路径中最后一个点；没有共同点就必须显式指定。
 - **取代**：新思路推翻或替代了旧思路的结论时，`line link <新线> --rel supersedes --to <旧线>`，旧线自动变为 superseded，之后 recall 只返回新线。
+- **树状展开**：普通 `recall` 仍只返回匹配线的 L0 摘要；需要查看一条线的父线、子线和分叉点时，用 `tree L-…`。树按 `branches_from` 展开分支，也显示标为“取代”的 `supersedes` 历史边；普通 `recall` 的最新线跳转不变。旧线文件没有 `fork_at` 时，树视图会从两条线共同经过的最后一个点推断，并标为“推断”。
 - **归档**：用户明确认定某段历史无用时才 `archive <L-…或点编号>`；失败但有教训的线应 close 为 abandoned，不要归档。
 - 普通问答、一步就完成的小改动、没有分支的直线任务不需要开线。阶段结束时可运行 `lint` 检查遗漏的 why、outcome 和长期未关闭的线。
 
@@ -175,9 +177,11 @@ python scripts/record.py recall "逐段缩小范围定位" --by method
 python scripts/record.py recall "导入很慢" --expand L-20261014-001  # L1：展开一条线
 python scripts/record.py show W-20261014-001.u2                     # L2：读单个点原文
 python scripts/record.py line open --title "改用流式解析" --situation "大文件导入内存溢出" --method "边读边解析，不整批载入" --why "整批载入时峰值内存随文件线性增长" --from W-20261014-001
+python scripts/record.py line open --title "改用候选流式解析" --situation "大文件导入内存溢出" --method "只在共享点后边读边解析" --why "需要保留原方案作为对照" --from W-20261014-001.u1 --branches-from L-20261014-001 --fork-at W-20261014-001
 python scripts/record.py line extend L-20261014-001 --node W-20261014-001.u1 --role result
 python scripts/record.py line close L-20261014-001 --status worked --outcome "峰值内存稳定在 200MB 内；适用于逐行可独立解析的格式"
 python scripts/record.py line link L-20261015-001 --rel supersedes --to L-20261014-001
+python scripts/record.py tree L-20261015-001
 python scripts/record.py lint
 ```
 

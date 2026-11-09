@@ -132,6 +132,8 @@ class GraphCliTestCase(unittest.TestCase):
                 "--why", values["why"], "--from", values["node"]]
         if values.get("branches_from"):
             args += ["--branches-from", values["branches_from"]]
+        if values.get("fork_at"):
+            args += ["--fork-at", values["fork_at"]]
         before = self.line_files()
         result = self.assert_ok(*args)
         created = self.line_files() - before
@@ -146,6 +148,9 @@ class GraphCliTestCase(unittest.TestCase):
     def expand(self, alias):
         # QUERY is supplied because the CLI table declares it positional.
         return self.recall(self.line_meta(alias)["title"], "--expand", LINES[alias])
+
+    def tree(self, alias_or_id, *args):
+        return self.json_cli("tree", LINES.get(alias_or_id, alias_or_id), *args)
 
     def ids(self, view):
         return [row["id"] for row in view["lines"]]

@@ -140,10 +140,35 @@ class LineStorageTests(GraphCliTestCase):
 
     def test_open_branches_from_and_link_relation(self):
         """新建时指定分支与后续关联都写入 branches_from 关系。"""
-        lid = self.open_line(branches_from=LINES["A1"])
-        self.assertIn({"line": LINES["A1"], "rel": "branches_from"}, self.line_meta(lid)["relates"])
-        self.assert_ok("line", "link", lid, "--rel", "branches_from", "--to", LINES["B1"])
-        self.assertIn({"line": LINES["B1"], "rel": "branches_from"}, self.line_meta(lid)["relates"])
+        lid = self.open_line(branches_from=LINES["A1"], fork_at=SHARED + ".u1")
+        self.assertIn({"line": LINES["A1"], "rel": "branches_from", "fork_at": SHARED + ".u1"},
+                      self.line_meta(lid)["relates"])
+        self.assert_ok("line", "link", lid, "--rel", "branches_from", "--to", LINES["B1"],
+                       "--fork-at", "D-20260928-001")
+        relation = next(item for item in self.line_meta(lid)["relates"] if item["line"] == LINES["B1"])
+        self.assertEqual(relation["rel"], "branches_from")
+        self.assertEqual(relation["fork_at"], "D-20260928-001")
+
+    def test_open_branch_requires_parent_fork_point(self):
+        """分叉点必须是父线中的点，并写入关系。"""
+        before = self.line_files()
+        self.assert_error(2, "line", "open", "--title", "无效分叉", "--situation", "全新分支",
+                          "--method", "新方法", "--why", "核对分支", "--from", SHARED,
+                          "--branches-from", LINES["A1"], "--fork-at", MISSING_NODE)
+        self.assertEqual(self.line_files(), before)
+
+    def test_open_branch_can_start_after_explicit_parent_fork(self):
+        """新线可以从分叉点之后的新点开始，并保留父线分叉点。"""
+        lid = self.open_line(title="显式分叉后的尝试", situation="显式分叉新问题",
+                             method="从分叉点之后开始新方法", node="W-20260921-001",
+                             branches_from=LINES["A1"], fork_at=SHARED,)
+        relation = self.line_meta(lid)["relates"][0]
+        self.assertEqual(relation, {"line": LINES["A1"], "rel": "branches_from", "fork_at": SHARED})
+
+    def test_link_branch_rejects_unanchored_lines(self):
+        """没有共同点时不能默认为分叉点，必须显式指定父线中的点。"""
+        lid = self.open_line(node="W-20260929-002", situation="完全独立分支", method="独立方法")
+        self.assert_error(2, "line", "link", lid, "--rel", "branches_from", "--to", LINES["A1"])
 
     def test_first_open_in_git_tracks_worklog_and_ignores_only_index(self):
         """Git 项目首次新建线后只忽略派生索引，线文件本身要纳入版本控制。"""
