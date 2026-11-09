@@ -1,0 +1,2 @@
+# Keep text files LF on every platform (fixtures and scripts are compared byte-for-byte).
+* text=auto eol=lf

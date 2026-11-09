@@ -36,6 +36,7 @@ LINE_KEYS = {"schema", "id", "title", "status", "situation", "method", "why",
 def cli_env():
     env = os.environ.copy()
     env["AGENT_WORK_LOG_EMBED"] = "none"
+    env["PYTHONUTF8"] = "1"
     env.pop("AGENT_WORK_LOG_DIR", None)
     env["AGENT_WORK_LOG_TIMEZONE"] = "America/Los_Angeles"
     return env
@@ -45,7 +46,7 @@ def graph_available():
     """Probe only the help command, without opening any work log."""
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "line", "--help"],
-        cwd=ROOT, env=cli_env(), text=True, capture_output=True,
+        cwd=ROOT, env=cli_env(), text=True, encoding="utf-8", capture_output=True,
     )
     return result.returncode == 0
 
@@ -85,7 +86,7 @@ class GraphCliTestCase(unittest.TestCase):
             argv.extend(["--now", now])
         return subprocess.run(
             [sys.executable, str(SCRIPT), *argv], cwd=cwd or self.project,
-            env=self.env, text=True, capture_output=True,
+            env=self.env, text=True, encoding="utf-8", capture_output=True,
         )
 
     def json_cli(self, *args, **kwargs):

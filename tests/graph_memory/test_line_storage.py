@@ -175,10 +175,10 @@ class LineStorageTests(GraphCliTestCase):
         subprocess.run(["git", "init", "-q", str(self.project)], check=True, capture_output=True)
         (self.project / ".gitignore").write_text("existing-rule/\n", encoding="utf-8")
         lid = self.open_line()
-        self.assertIn("existing-rule/", (self.project / ".gitignore").read_text())
+        self.assertIn("existing-rule/", (self.project / ".gitignore").read_text(encoding="utf-8"))
         result = subprocess.run(
-            ["git", "check-ignore", str(self.line_path(lid)), str(self.log_dir / ".index" / "probe")],
-            cwd=self.project, text=True, capture_output=True,
+            ["git", "check-ignore", self.line_path(lid).as_posix(), (self.log_dir / ".index" / "probe").as_posix()],
+            cwd=self.project, text=True, encoding="utf-8", capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(set(result.stdout.splitlines()), {str(self.log_dir / ".index" / "probe")})
+        self.assertEqual(set(result.stdout.splitlines()), {(self.log_dir / ".index" / "probe").as_posix()})

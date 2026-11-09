@@ -721,6 +721,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows pipes default to the locale codepage; output and stdin are UTF-8 by contract.
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        # newline="\n": no LF -> CRLF translation, so file text is echoed byte-for-byte.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

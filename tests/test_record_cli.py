@@ -29,7 +29,7 @@ class RecordCliTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
             cwd=cwd or self.project, env=env or self.env,
-            text=True, capture_output=True,
+            text=True, encoding="utf-8", capture_output=True,
         )
 
     def json_cli(self, *args, **kwargs):
@@ -46,7 +46,7 @@ class RecordCliTests(unittest.TestCase):
             "summary": summary, "updated_at": f"{day}T22:00:00-07:00",
             "entry_count": 0, "work_ids": [],
         }
-        path.write_text("---\n" + yaml.safe_dump(meta, allow_unicode=True) + "---\n\n" + body)
+        path.write_text("---\n" + yaml.safe_dump(meta, allow_unicode=True) + "---\n\n" + body, encoding="utf-8")
         return path
 
     def history(self):
@@ -83,7 +83,7 @@ class RecordCliTests(unittest.TestCase):
         self.assertEqual(entry["updated_at"], "2026-10-02T11:00:00-07:00")
         self.assertIn("只看故障后的读数", entry["matches"][0]["text"])
         self.assertIn("没有比较事发前的基准", entry["updates"][0]["text"])
-        source_lines = path.read_text().splitlines()
+        source_lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(source_lines[entry["line"] - 1], "<!-- work-id: W-20261001-001 -->")
         self.assertEqual(source_lines[entry["updates"][0]["line"] - 1], "#### 更新 11:00 — 否定早期方案")
 
@@ -199,7 +199,7 @@ D1 平台分数 33,900.5，CPU 用量另有日志。
         )
         self.assertEqual(write.returncode, 0, write.stderr)
         self.assertFalse((self.project / "2026").exists())
-        self.assertIn("worklog/", (self.project / ".gitignore").read_text())
+        self.assertIn("worklog/", (self.project / ".gitignore").read_text(encoding="utf-8"))
 
     def test_non_git_nested_lookup_and_explicit_project_from_elsewhere(self):
         self.write_log(self.history())
@@ -224,7 +224,7 @@ D1 平台分数 33,900.5，CPU 用量另有日志。
 
     def test_read_commands_do_not_change_files_or_gitignore(self):
         self.write_log(self.history())
-        (self.project / ".gitignore").write_text("existing-rule/\n")
+        (self.project / ".gitignore").write_text("existing-rule/\n", encoding="utf-8")
         before = {
             str(p): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in self.project.rglob("*") if p.is_file()
@@ -254,7 +254,7 @@ D1 平台分数 33,900.5，CPU 用量另有日志。
         self.assertEqual(result["status"], "已完成")
         self.assertIn("旧方案待验证", result["content"])
         self.assertIn("新方案通过独立核验", result["content"])
-        meta = yaml.safe_load(Path(filename).read_text().split("---", 2)[1])
+        meta = yaml.safe_load(Path(filename).read_text(encoding="utf-8").split("---", 2)[1])
         self.assertEqual(meta["entry_count"], 1)
         self.assertEqual(meta["work_ids"], [record_id])
 
@@ -284,7 +284,7 @@ D1 平台分数 33,900.5，CPU 用量另有日志。
         self.assertEqual(duplicate.returncode, 2)
         self.assertIn("记录编号重复", duplicate.stderr)
         broken = self.project / "worklog" / "2026" / "2026-10-03.md"
-        broken.write_text("missing metadata")
+        broken.write_text("missing metadata", encoding="utf-8")
         result = self.json_cli("search", "只看")
         self.assertEqual(len(result["results"]), 2)
         self.assertTrue(result["warnings"])

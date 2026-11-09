@@ -30,7 +30,7 @@ class ShowArchiveTests(GraphCliTestCase):
         self.assert_error(4, "show", LINES["Z1"])
         result = self.assert_ok("show", LINES["Z1"], "--include-archived")
         self.assertIn("ARCHIVED_SENTINEL_Z1", result.stdout)
-        self.assertIn(self.line_path("Z1").read_text().rstrip(), result.stdout)
+        self.assertIn(self.line_path("Z1").read_text(encoding="utf-8").rstrip(), result.stdout)
 
     def test_show_archived_node_requires_include_archived(self):
         """归档点默认返回 4 且显式允许归档后才可读取。"""
@@ -50,7 +50,7 @@ class ShowArchiveTests(GraphCliTestCase):
         """归档点只写归档清单且每日日志保持字节不变。"""
         before = self.daily_hashes()
         self.assert_ok("archive", SHARED)
-        registry = (self.log_dir / "lines" / ".archived_nodes").read_text().splitlines()
+        registry = (self.log_dir / "lines" / ".archived_nodes").read_text(encoding="utf-8").splitlines()
         self.assertIn(SHARED, registry)
         self.assertIn(ARCHIVED_NODE, registry)
         self.assertEqual(self.daily_hashes(), before)

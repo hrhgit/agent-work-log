@@ -43,7 +43,7 @@ def evaluate(queries, k=5, embed="none"):
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "recall", case["query"], "--by", case["by"],
                  "--limit", str(k), "--log-dir", str(logs), "--json"],
-                cwd=project, env={**cli_env(), "AGENT_WORK_LOG_EMBED": embed}, text=True, capture_output=True,
+                cwd=project, env={**cli_env(), "AGENT_WORK_LOG_EMBED": embed}, text=True, encoding="utf-8", capture_output=True,
             )
             if result.returncode:
                 raise RuntimeError(f'{case["id"]}: CLI 退出 {result.returncode}: {result.stderr}')
